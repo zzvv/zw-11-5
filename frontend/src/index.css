@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-50 text-gray-800;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply px-4 py-2 rounded-lg font-medium transition-colors duration-200 inline-flex items-center gap-2;
+  }
+  .btn-primary {
+    @apply btn;
+    background-color: theme('colors.primary.600');
+    color: white;
+  }
+  .btn-primary:hover {
+    background-color: theme('colors.primary.700');
+  }
+  .btn-secondary {
+    @apply btn;
+    background-color: theme('colors.gray.100');
+    color: theme('colors.gray.700');
+  }
+  .btn-secondary:hover {
+    background-color: theme('colors.gray.200');
+  }
+  .btn-danger {
+    @apply btn;
+    background-color: theme('colors.danger.600');
+    color: white;
+  }
+  .btn-danger:hover {
+    background-color: theme('colors.danger.700');
+  }
+  .card {
+    @apply bg-white rounded-xl shadow-sm border border-gray-100 p-6;
+  }
+  .form-input {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent;
+  }
+  .form-label {
+    @apply block text-sm font-medium text-gray-700 mb-1;
+  }
+}
+
+/* react-calendar custom styles */
+.react-calendar {
+  @apply w-full border-0 rounded-xl shadow-sm;
+}
+.react-calendar__tile {
+  @apply p-3 text-sm rounded-lg;
+}
+.react-calendar__tile--active {
+  @apply bg-primary-600 text-white;
+}
