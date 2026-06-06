@@ -168,10 +168,12 @@ contractSchema.pre('save', function(next) {
 
 contractSchema.statics.validateAndCompute = function(payload, options = {}) {
   const strict = options.strict === true;
+  const previewMode = options.preview === true;
   const errors = [];
   const warnings = [];
   const result = {};
   const raw = {};
+  const validStates = {};
 
   const checkAmount = (key, label, opts = {}) => {
     const { required = false, maxUpper = MAX_AMOUNT, upperBound = null, upperLabel = null } = opts;
@@ -186,6 +188,7 @@ contractSchema.statics.validateAndCompute = function(payload, options = {}) {
       }
       state.value = 0;
       raw[key] = rawVal;
+      validStates[key] = state.valid;
       return state;
     }
 
@@ -203,38 +206,29 @@ contractSchema.statics.validateAndCompute = function(payload, options = {}) {
       errors.push(`${label}不能超过${upperLabel || '上限'} ${upperBound.toLocaleString()}，当前输入为 ${num.toLocaleString()}`);
     }
 
-    if (!state.valid && !strict) {
-      warnings.push(`${label}输入异常，预览中按边界值展示，实际保存前请修正`);
-    }
-
     state.value = (isNaN(num) || !isFinite(num)) ? 0 : roundTo2(Math.max(MIN_AMOUNT, Math.min(maxUpper, num)));
     raw[key] = rawVal;
+    validStates[key] = state.valid;
     return state;
   };
 
   const amountState = checkAmount('amount', '合同金额', { required: true });
   result.amount = amountState.value;
-  if (!amountState.valid && strict) {
-    return { data: null, errors, warnings, raw };
-  }
 
-  const discountState = checkAmount('discountAmount', '优惠金额', {
-    maxUpper: result.amount,
-    upperBound: result.amount,
-    upperLabel: '合同金额'
-  });
-  result.discountAmount = discountState.value;
-
+  let percentValid = true;
   const percentNum = Number(payload.discountPercent);
   if (payload.discountPercent !== undefined && payload.discountPercent !== null && payload.discountPercent !== '') {
     if (isNaN(percentNum) || !isFinite(percentNum)) {
       errors.push(`优惠比例「${payload.discountPercent}」不是有效数字`);
+      percentValid = false;
       result.discountPercent = 0;
     } else if (percentNum < 0) {
       errors.push(`优惠比例不能小于 0%，当前输入为 ${percentNum}%`);
+      percentValid = false;
       result.discountPercent = 0;
     } else if (percentNum > MAX_DISCOUNT_PERCENT) {
       errors.push(`优惠比例不能大于 ${MAX_DISCOUNT_PERCENT}%，当前输入为 ${percentNum}%`);
+      percentValid = false;
       result.discountPercent = MAX_DISCOUNT_PERCENT;
     } else {
       result.discountPercent = roundTo2(percentNum);
@@ -244,6 +238,20 @@ contractSchema.statics.validateAndCompute = function(payload, options = {}) {
     result.discountPercent = 0;
     raw.discountPercent = payload.discountPercent;
   }
+  validStates.discountPercent = percentValid;
+
+  if (!amountState.valid) {
+    if (strict || previewMode) {
+      return { data: null, errors, warnings, raw, validFields: validStates };
+    }
+  }
+
+  const discountState = checkAmount('discountAmount', '优惠金额', {
+    maxUpper: result.amount,
+    upperBound: result.amount,
+    upperLabel: '合同金额'
+  });
+  result.discountAmount = discountState.value;
 
   const billedState = checkAmount('billedAmount', '已计费金额');
   result.billedAmount = billedState.value;
@@ -280,7 +288,12 @@ contractSchema.statics.validateAndCompute = function(payload, options = {}) {
   if (result.executionPercent > 100) result.executionPercent = 100;
   if (result.executionPercent < 0) result.executionPercent = 0;
 
-  return { data: result, errors, warnings, raw };
+  const hasAnyInvalid = Object.values(validStates).some(v => !v);
+  if (hasAnyInvalid && (strict || previewMode)) {
+    return { data: null, errors, warnings, raw, validFields: validStates };
+  }
+
+  return { data: result, errors, warnings, raw, validFields: validStates };
 };
 
 module.exports = mongoose.model('Contract', contractSchema);

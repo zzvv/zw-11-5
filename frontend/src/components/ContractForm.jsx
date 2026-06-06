@@ -153,15 +153,29 @@ export default function ContractForm({ contract, onClose }) {
       setWarnings([])
       return
     }
+    const validateOneLocal = (rawVal, { label, min = 0, max = MAX_AMOUNT, required = false, upper = null }) => {
+      if (rawVal === '' || rawVal === undefined || rawVal === null) {
+        return required ? { ok: false } : { ok: true, value: 0 }
+      }
+      const n = Number(rawVal)
+      if (isNaN(n) || !isFinite(n)) return { ok: false }
+      if (n < min) return { ok: false }
+      if (n > max) return { ok: false }
+      if (upper !== null && n > upper) return { ok: false }
+      return { ok: true, value: n }
+    }
+
     const timer = setTimeout(async () => {
       try {
         const res = await axios.post(`${API_BASE}/contracts/amount-preview`, payload)
         if (res.data?.success) {
-          setPreview(res.data.data)
-          setWarnings(res.data.warnings || [])
+          const backendErrors = res.data.errors || []
+          const backendWarnings = res.data.warnings || []
+          const hasBackendIssue = backendErrors.length > 0 || backendWarnings.length > 0 || !res.data.data
+          setPreview(hasBackendIssue ? null : res.data.data)
+          setWarnings(backendWarnings)
           const fErrs = {}
-          const rawErrs = res.data.errors || []
-          rawErrs.forEach(errMsg => {
+          backendErrors.forEach(errMsg => {
             Object.keys(FIELD_LABELS).forEach(key => {
               if (errMsg.includes(FIELD_LABELS[key]) && !fErrs[key]) {
                 fErrs[key] = errMsg
@@ -171,24 +185,35 @@ export default function ContractForm({ contract, onClose }) {
           setFieldErrors(fErrs)
         }
       } catch (e) {
-        const amount = form.amount === '' || isNaN(Number(form.amount)) ? 0 : Number(form.amount)
-        const dAmount = form.discountAmount === '' || isNaN(Number(form.discountAmount)) ? 0 : Number(form.discountAmount)
-        const dPercent = form.discountPercent === '' || isNaN(Number(form.discountPercent)) ? 0 : Math.max(0, Math.min(100, Number(form.discountPercent)))
-        const billed = form.billedAmount === '' || isNaN(Number(form.billedAmount)) ? 0 : Number(form.billedAmount)
-        const deductible = form.deductibleAmount === '' || isNaN(Number(form.deductibleAmount)) ? 0 : Number(form.deductibleAmount)
+        const aCheck = validateOneLocal(form.amount, { label: '合同金额', required: true })
+        if (!aCheck.ok) { setPreview(null); return }
+        const amount = aCheck.value
+        const dCheck = validateOneLocal(form.discountAmount, { label: '优惠金额', upper: amount })
+        const dpCheck = validateOneLocal(form.discountPercent, { label: '优惠比例', max: 100 })
+        if (!dCheck.ok || !dpCheck.ok) { setPreview(null); return }
+        const dAmount = dCheck.value
+        const dPercent = dpCheck.value
+        const bCheck = validateOneLocal(form.billedAmount, { label: '已计费金额' })
+        if (!bCheck.ok) { setPreview(null); return }
+        const billed = bCheck.value
+        const ddCheck = validateOneLocal(form.deductibleAmount, { label: '抵扣金额', upper: billed > 0 ? billed : null })
+        if (!ddCheck.ok) { setPreview(null); return }
+        const deductible = ddCheck.value
         let computedDiscount = dAmount
         if (dPercent > 0 && (form.discountAmount === '' || Number(form.discountAmount) <= 0 || isNaN(Number(form.discountAmount)))) {
           computedDiscount = roundTo2(amount * dPercent / 100)
         }
         if (computedDiscount > amount) computedDiscount = amount
         const finalPayable = Math.max(0, roundTo2(amount - computedDiscount))
-        const executed = form.executedAmount === '' || isNaN(Number(form.executedAmount)) ? 0 : Math.max(0, Math.min(finalPayable, Number(form.executedAmount)))
+        const eCheck = validateOneLocal(form.executedAmount, { label: '已执行金额', upper: finalPayable })
+        if (!eCheck.ok) { setPreview(null); return }
+        const executed = eCheck.value
         setPreview({
           amount,
-          discountAmount: Math.min(dAmount, amount),
+          discountAmount: dAmount,
           discountPercent: dPercent,
           billedAmount: billed,
-          deductibleAmount: Math.min(deductible, billed > 0 ? billed : deductible),
+          deductibleAmount: deductible,
           executedAmount: executed,
           finalPayableAmount: finalPayable,
           remainingAmount: Math.max(0, roundTo2(finalPayable - executed)),
@@ -433,7 +458,7 @@ export default function ContractForm({ contract, onClose }) {
               </div>
             </div>
 
-            {preview && (
+            {preview ? (
               <div className="mt-4 grid grid-cols-4 gap-3">
                 <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
                   <div className="text-xs text-gray-500">优惠后应付</div>
@@ -456,14 +481,17 @@ export default function ContractForm({ contract, onClose }) {
                   <span>执行进度：<span className="font-bold">{preview.executionPercent}%</span></span>
                   {preview.discountAmount > 0 && <span className="ml-2">优惠金额：{formatMoney(preview.discountAmount)}</span>}
                   {preview.discountPercent > 0 && <span>（{preview.discountPercent}%）</span>}
-                  {warnings.length === 0 && hasAnyAmountError && (
-                    <span className="ml-auto text-danger-700 font-medium flex items-center gap-1">
-                      <AlertCircle size={12} /> 仍有字段错误，请修正后再保存
-                    </span>
-                  )}
                 </div>
               </div>
-            )}
+            ) : (hasAnyAmountError || warnings.length > 0) ? (
+              <div className="mt-4 bg-gray-50 border border-gray-200 rounded-lg p-4 flex items-start gap-3">
+                <AlertCircle size={18} className="text-gray-500 flex-shrink-0 mt-0.5" />
+                <div className="text-sm text-gray-600">
+                  <div className="font-medium text-gray-700 mb-0.5">暂不展示金额预览</div>
+                  <div className="text-xs text-gray-500">请先修正红色标注的金额字段错误，所有金额字段通过校验后，将自动展示优惠后应付、剩余应付、净应付等计算结果。</div>
+                </div>
+              </div>
+            ) : null}
           </div>
 
           <div className="border-t border-gray-100 pt-4">

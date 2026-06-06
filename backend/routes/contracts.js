@@ -65,13 +65,14 @@ router.get('/:id', async (req, res) => {
 
 router.post('/amount-preview', async (req, res) => {
   try {
-    const result = Contract.validateAndCompute(req.body || {}, { strict: false });
+    const result = Contract.validateAndCompute(req.body || {}, { preview: true });
     res.json({
       success: true,
       data: result.data,
       errors: result.errors,
       warnings: result.warnings,
-      raw: result.raw
+      raw: result.raw,
+      validFields: result.validFields
     });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
