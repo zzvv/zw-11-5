@@ -65,11 +65,13 @@ router.get('/:id', async (req, res) => {
 
 router.post('/amount-preview', async (req, res) => {
   try {
-    const { data, errors } = Contract.validateAndCompute(req.body || {});
+    const result = Contract.validateAndCompute(req.body || {}, { strict: false });
     res.json({
       success: true,
-      data,
-      warnings: errors
+      data: result.data,
+      errors: result.errors,
+      warnings: result.warnings,
+      raw: result.raw
     });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
@@ -78,15 +80,23 @@ router.post('/amount-preview', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const { data: computed, errors } = Contract.validateAndCompute(req.body || {});
-    const payload = { ...req.body, ...computed };
-
+    const computed = Contract.validateAndCompute(req.body || {}, { strict: true });
+    if (computed.errors && computed.errors.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: '金额校验失败，请修正后再提交',
+        errors: computed.errors,
+        warnings: computed.warnings,
+        raw: computed.raw
+      });
+    }
+    const payload = { ...req.body, ...computed.data };
     const contract = new Contract(payload);
     await contract.save();
     res.status(201).json({
       success: true,
       data: contract,
-      warnings: errors.length > 0 ? errors : undefined
+      warnings: (computed.warnings || []).length > 0 ? computed.warnings : undefined
     });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
@@ -97,19 +107,26 @@ router.put('/:id', async (req, res) => {
   try {
     const existing = await Contract.findById(req.params.id);
     if (!existing) return res.status(404).json({ success: false, message: '合同不存在' });
-
     const merged = { ...existing.toObject(), ...req.body };
-    const { data: computed, errors } = Contract.validateAndCompute(merged);
-
+    const computed = Contract.validateAndCompute(merged, { strict: true });
+    if (computed.errors && computed.errors.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: '金额校验失败，请修正后再提交',
+        errors: computed.errors,
+        warnings: computed.warnings,
+        raw: computed.raw
+      });
+    }
     const contract = await Contract.findByIdAndUpdate(
       req.params.id,
-      { ...req.body, ...computed },
+      { ...req.body, ...computed.data },
       { new: true, runValidators: true }
     );
     res.json({
       success: true,
       data: contract,
-      warnings: errors.length > 0 ? errors : undefined
+      warnings: (computed.warnings || []).length > 0 ? computed.warnings : undefined
     });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
@@ -133,12 +150,30 @@ router.post('/import', async (req, res) => {
     if (!Array.isArray(contracts)) {
       return res.status(400).json({ success: false, message: '导入数据格式错误' });
     }
-    const normalized = contracts.map(c => {
-      const { data } = Contract.validateAndCompute(c);
-      return { ...c, ...data };
+    const importErrors = [];
+    const normalized = [];
+    contracts.forEach((c, idx) => {
+      const result = Contract.validateAndCompute(c, { strict: true });
+      if (result.errors && result.errors.length > 0) {
+        importErrors.push({ row: idx + 1, contractNo: c.contractNo, errors: result.errors });
+      } else {
+        normalized.push({ ...c, ...result.data });
+      }
     });
+    if (normalized.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: '全部数据校验失败，未导入任何合同',
+        importErrors
+      });
+    }
     const result = await Contract.insertMany(normalized, { ordered: false });
-    res.json({ success: true, data: result });
+    res.json({
+      success: true,
+      data: result,
+      skipped: contracts.length - result.length,
+      importErrors: importErrors.length > 0 ? importErrors : undefined
+    });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
   }

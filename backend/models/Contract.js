@@ -166,78 +166,111 @@ contractSchema.pre('save', function(next) {
   next();
 });
 
-contractSchema.statics.validateAndCompute = function(payload) {
+contractSchema.statics.validateAndCompute = function(payload, options = {}) {
+  const strict = options.strict === true;
   const errors = [];
+  const warnings = [];
   const result = {};
+  const raw = {};
 
-  const amount = Number(payload.amount);
-  if (isNaN(amount) || !isFinite(amount)) {
-    errors.push('合同金额必须是有效数字');
-  } else if (amount < MIN_AMOUNT) {
-    errors.push(`合同金额不能小于 ${MIN_AMOUNT}`);
-  } else if (amount > MAX_AMOUNT) {
-    errors.push(`合同金额不能大于 ${MAX_AMOUNT}`);
-  }
-  result.amount = isNaN(amount) ? 0 : roundTo2(Math.max(MIN_AMOUNT, Math.min(MAX_AMOUNT, amount)));
+  const checkAmount = (key, label, opts = {}) => {
+    const { required = false, maxUpper = MAX_AMOUNT, upperBound = null, upperLabel = null } = opts;
+    const rawVal = payload[key];
+    const num = Number(rawVal);
+    const state = { valid: true, value: 0 };
 
-  let discountAmount = Number(payload.discountAmount);
-  if (isNaN(discountAmount) || !isFinite(discountAmount)) {
-    errors.push('优惠金额必须是有效数字');
-    discountAmount = 0;
-  }
-  if (discountAmount < MIN_AMOUNT) discountAmount = MIN_AMOUNT;
-  if (discountAmount > result.amount) {
-    errors.push('优惠金额不能超过合同金额，已自动截断');
-    discountAmount = result.amount;
-  }
-  result.discountAmount = roundTo2(discountAmount);
+    if (rawVal === undefined || rawVal === null || rawVal === '') {
+      if (required) {
+        errors.push(`${label}不能为空，请填写`);
+        state.valid = false;
+      }
+      state.value = 0;
+      raw[key] = rawVal;
+      return state;
+    }
 
-  let discountPercent = Number(payload.discountPercent);
-  if (isNaN(discountPercent) || !isFinite(discountPercent)) {
-    errors.push('优惠比例必须是有效数字');
-    discountPercent = 0;
-  }
-  if (discountPercent < 0) discountPercent = 0;
-  if (discountPercent > MAX_DISCOUNT_PERCENT) {
-    errors.push(`优惠比例不能超过 ${MAX_DISCOUNT_PERCENT}%`);
-    discountPercent = MAX_DISCOUNT_PERCENT;
-  }
-  result.discountPercent = roundTo2(discountPercent);
+    if (isNaN(num) || !isFinite(num)) {
+      errors.push(`${label}「${rawVal}」不是有效数字，请输入合法数字`);
+      state.valid = false;
+    } else if (num < MIN_AMOUNT) {
+      errors.push(`${label}不能小于 ${MIN_AMOUNT}，当前输入为 ${num}`);
+      state.valid = false;
+    } else if (num > maxUpper) {
+      errors.push(`${label}不能大于 ${maxUpper.toLocaleString()}，当前输入为 ${num.toLocaleString()}`);
+      state.valid = false;
+    } else if (upperBound !== null && num > upperBound) {
+      state.valid = false;
+      errors.push(`${label}不能超过${upperLabel || '上限'} ${upperBound.toLocaleString()}，当前输入为 ${num.toLocaleString()}`);
+    }
 
-  let billedAmount = Number(payload.billedAmount);
-  if (isNaN(billedAmount) || !isFinite(billedAmount)) {
-    billedAmount = 0;
-  }
-  if (billedAmount < MIN_AMOUNT) billedAmount = MIN_AMOUNT;
-  if (billedAmount > MAX_AMOUNT) billedAmount = MAX_AMOUNT;
-  result.billedAmount = roundTo2(billedAmount);
+    if (!state.valid && !strict) {
+      warnings.push(`${label}输入异常，预览中按边界值展示，实际保存前请修正`);
+    }
 
-  let deductibleAmount = Number(payload.deductibleAmount);
-  if (isNaN(deductibleAmount) || !isFinite(deductibleAmount)) {
-    deductibleAmount = 0;
+    state.value = (isNaN(num) || !isFinite(num)) ? 0 : roundTo2(Math.max(MIN_AMOUNT, Math.min(maxUpper, num)));
+    raw[key] = rawVal;
+    return state;
+  };
+
+  const amountState = checkAmount('amount', '合同金额', { required: true });
+  result.amount = amountState.value;
+  if (!amountState.valid && strict) {
+    return { data: null, errors, warnings, raw };
   }
-  if (deductibleAmount < MIN_AMOUNT) deductibleAmount = MIN_AMOUNT;
-  if (result.billedAmount > 0 && deductibleAmount > result.billedAmount) {
-    errors.push('抵扣金额不能超过已计费金额，已自动截断');
-    deductibleAmount = result.billedAmount;
+
+  const discountState = checkAmount('discountAmount', '优惠金额', {
+    maxUpper: result.amount,
+    upperBound: result.amount,
+    upperLabel: '合同金额'
+  });
+  result.discountAmount = discountState.value;
+
+  const percentNum = Number(payload.discountPercent);
+  if (payload.discountPercent !== undefined && payload.discountPercent !== null && payload.discountPercent !== '') {
+    if (isNaN(percentNum) || !isFinite(percentNum)) {
+      errors.push(`优惠比例「${payload.discountPercent}」不是有效数字`);
+      result.discountPercent = 0;
+    } else if (percentNum < 0) {
+      errors.push(`优惠比例不能小于 0%，当前输入为 ${percentNum}%`);
+      result.discountPercent = 0;
+    } else if (percentNum > MAX_DISCOUNT_PERCENT) {
+      errors.push(`优惠比例不能大于 ${MAX_DISCOUNT_PERCENT}%，当前输入为 ${percentNum}%`);
+      result.discountPercent = MAX_DISCOUNT_PERCENT;
+    } else {
+      result.discountPercent = roundTo2(percentNum);
+    }
+    raw.discountPercent = payload.discountPercent;
+  } else {
+    result.discountPercent = 0;
+    raw.discountPercent = payload.discountPercent;
   }
-  result.deductibleAmount = roundTo2(deductibleAmount);
+
+  const billedState = checkAmount('billedAmount', '已计费金额');
+  result.billedAmount = billedState.value;
+
+  const deductibleUpper = result.billedAmount > 0 ? result.billedAmount : MAX_AMOUNT;
+  const deductibleLabel = result.billedAmount > 0 ? `已计费金额 (${result.billedAmount.toLocaleString()})` : null;
+  const deductibleState = checkAmount('deductibleAmount', '抵扣金额', {
+    maxUpper: deductibleUpper,
+    upperBound: result.billedAmount > 0 ? result.billedAmount : null,
+    upperLabel: deductibleLabel
+  });
+  result.deductibleAmount = deductibleState.value;
 
   let computedDiscount = result.discountAmount;
-  if (result.discountPercent > 0 && result.discountAmount === 0) {
+  if (result.discountPercent > 0 && (Number(payload.discountAmount) <= 0 || isNaN(Number(payload.discountAmount)))) {
     computedDiscount = roundTo2(result.amount * (result.discountPercent / 100));
   }
   if (computedDiscount > result.amount) computedDiscount = result.amount;
 
   const finalPayableAmount = roundTo2(Math.max(0, result.amount - computedDiscount));
-  let executedAmount = Number(payload.executedAmount);
-  if (isNaN(executedAmount) || !isFinite(executedAmount)) executedAmount = 0;
-  if (executedAmount < 0) executedAmount = 0;
-  if (executedAmount > finalPayableAmount) {
-    errors.push('已执行金额不能超过优惠后应付金额，已自动截断');
-    executedAmount = finalPayableAmount;
-  }
-  result.executedAmount = roundTo2(executedAmount);
+
+  const executedState = checkAmount('executedAmount', '已执行/实付金额', {
+    maxUpper: finalPayableAmount,
+    upperBound: finalPayableAmount,
+    upperLabel: `优惠后应付金额 (${finalPayableAmount.toLocaleString()})`
+  });
+  result.executedAmount = executedState.value;
   result.finalPayableAmount = finalPayableAmount;
   result.remainingAmount = roundTo2(Math.max(0, finalPayableAmount - result.executedAmount));
   result.netPayableAmount = roundTo2(Math.max(0, Math.max(0, result.billedAmount - result.deductibleAmount) - result.executedAmount));
@@ -245,8 +278,9 @@ contractSchema.statics.validateAndCompute = function(payload) {
     ? roundTo2((result.executedAmount / finalPayableAmount) * 100)
     : 0;
   if (result.executionPercent > 100) result.executionPercent = 100;
+  if (result.executionPercent < 0) result.executionPercent = 0;
 
-  return { data: result, errors };
+  return { data: result, errors, warnings, raw };
 };
 
 module.exports = mongoose.model('Contract', contractSchema);
