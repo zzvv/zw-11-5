@@ -112,20 +112,47 @@ export default function ContractDetail() {
         <div className="space-y-6">
           {/* Execution Progress */}
           <div className="card">
-            <h3 className="text-sm font-semibold text-gray-700 mb-4">执行进度</h3>
+            <h3 className="text-sm font-semibold text-gray-700 mb-4">执行进度与金额明细</h3>
             <ProgressBar percent={contract.executionPercent || 0} size="lg" />
             <div className="grid grid-cols-3 gap-6 mt-4 text-center">
               <div>
-                <div className="text-xl font-bold">¥{contract.amount.toLocaleString()}</div>
+                <div className="text-xl font-bold">¥{(contract.amount || 0).toLocaleString()}</div>
                 <div className="text-xs text-gray-500">合同金额</div>
               </div>
               <div>
                 <div className="text-xl font-bold text-success-600">¥{(contract.executedAmount || 0).toLocaleString()}</div>
-                <div className="text-xs text-gray-500">已执行</div>
+                <div className="text-xs text-gray-500">已执行/实付</div>
               </div>
               <div>
                 <div className="text-xl font-bold text-warning-600">¥{(contract.remainingAmount || 0).toLocaleString()}</div>
-                <div className="text-xs text-gray-500">剩余金额</div>
+                <div className="text-xs text-gray-500">剩余应付金额</div>
+              </div>
+            </div>
+
+            <div className="mt-6 pt-5 border-t border-gray-100 grid grid-cols-2 gap-4 text-sm">
+              <div className="bg-gray-50 rounded-lg p-3">
+                <div className="text-xs text-gray-500 mb-1">优惠金额</div>
+                <div className="font-semibold">¥{(contract.discountAmount || 0).toLocaleString()}</div>
+                {contract.discountPercent > 0 && (
+                  <div className="text-xs text-gray-500 mt-1">折扣率 {contract.discountPercent}%</div>
+                )}
+              </div>
+              <div className="bg-primary-50 rounded-lg p-3">
+                <div className="text-xs text-primary-600 mb-1">★优惠后应付金额</div>
+                <div className="font-bold text-primary-700 text-lg">¥{(contract.finalPayableAmount || contract.amount || 0).toLocaleString()}</div>
+                <div className="text-xs text-primary-500 mt-1">合同金额 - 优惠金额</div>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3">
+                <div className="text-xs text-gray-500 mb-1">已计费金额</div>
+                <div className="font-semibold">¥{(contract.billedAmount || 0).toLocaleString()}</div>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3">
+                <div className="text-xs text-gray-500 mb-1">抵扣金额</div>
+                <div className="font-semibold">¥{(contract.deductibleAmount || 0).toLocaleString()}</div>
+              </div>
+              <div className="col-span-2 bg-success-50 rounded-lg p-3 border border-success-100">
+                <div className="text-xs text-success-700 mb-1">★净应付金额（计费 - 抵扣 - 已付）</div>
+                <div className="font-bold text-success-700 text-lg">¥{(contract.netPayableAmount !== undefined ? contract.netPayableAmount : ((contract.billedAmount || 0) - (contract.deductibleAmount || 0) - (contract.executedAmount || 0))).toLocaleString()}</div>
               </div>
             </div>
           </div>

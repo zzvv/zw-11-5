@@ -13,8 +13,15 @@ const API_BASE = '/api'
 
 const REQUIRED_FIELDS = [
   { key: 'amount', label: '合同金额', category: '金额' },
-  { key: 'executedAmount', label: '已执行金额', category: '金额' },
-  { key: 'remainingAmount', label: '剩余金额', category: '金额' },
+  { key: 'discountAmount', label: '优惠金额', category: '金额' },
+  { key: 'discountPercent', label: '优惠比例(%)', category: '金额' },
+  { key: 'finalPayableAmount', label: '优惠后应付金额', category: '金额' },
+  { key: 'billedAmount', label: '已计费金额', category: '金额' },
+  { key: 'deductibleAmount', label: '抵扣金额', category: '金额' },
+  { key: 'executedAmount', label: '已执行/实付金额', category: '金额' },
+  { key: 'remainingAmount', label: '剩余应付金额', category: '金额' },
+  { key: 'netPayableAmount', label: '净应付金额(计费-抵扣-已付)', category: '金额' },
+  { key: 'executionPercent', label: '执行进度(%)', category: '金额' },
   { key: 'signDate', label: '签订日期', category: '期限' },
   { key: 'effectiveDate', label: '生效日期', category: '期限' },
   { key: 'expiryDate', label: '到期日期', category: '期限' },
@@ -98,7 +105,14 @@ export default function ContractCompare() {
   }
 
   const formatDate = (date) => date ? moment(date).format('YYYY-MM-DD') : null
-  const formatMoney = (amount) => (amount !== undefined && amount !== null && amount !== '') ? `¥${Number(amount).toLocaleString()}` : null
+  const formatMoney = (amount) => {
+    if (amount === undefined || amount === null || amount === '' || isNaN(Number(amount))) return null
+    return `¥${Number(amount).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  }
+  const formatPercent = (val) => {
+    if (val === undefined || val === null || val === '' || isNaN(Number(val))) return null
+    return `${Number(val).toFixed(2)}%`
+  }
 
   const missingFieldsA = useMemo(() => {
     if (!contractA) return []
@@ -436,31 +450,82 @@ export default function ContractCompare() {
 
             <div className="px-6">
               <div className="py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100">
-                <DollarSign size={14} className="inline mr-1" /> 金额信息
+                <DollarSign size={14} className="inline mr-1" /> 金额与计费信息
               </div>
               <DiffCell
                 label="合同金额"
                 icon={DollarSign}
                 valueA={formatMoney(contractA.amount)}
                 valueB={formatMoney(contractB.amount)}
-                subA={!isFieldMissing(contractA, 'amount') && contractA.executionPercent !== undefined ? `已执行 ${contractA.executionPercent}%` : ''}
-                subB={!isFieldMissing(contractB, 'amount') && contractB.executionPercent !== undefined ? `已执行 ${contractB.executionPercent}%` : ''}
                 missingA={isFieldMissing(contractA, 'amount')}
                 missingB={isFieldMissing(contractB, 'amount')}
               />
               <DiffCell
-                label="已执行金额"
+                label="优惠金额"
+                valueA={formatMoney(contractA.discountAmount)}
+                valueB={formatMoney(contractB.discountAmount)}
+                missingA={isFieldMissing(contractA, 'discountAmount')}
+                missingB={isFieldMissing(contractB, 'discountAmount')}
+              />
+              <DiffCell
+                label="优惠比例"
+                valueA={formatPercent(contractA.discountPercent)}
+                valueB={formatPercent(contractB.discountPercent)}
+                missingA={isFieldMissing(contractA, 'discountPercent')}
+                missingB={isFieldMissing(contractB, 'discountPercent')}
+              />
+              <DiffCell
+                label="★优惠后应付金额"
+                valueA={formatMoney(contractA.finalPayableAmount)}
+                valueB={formatMoney(contractB.finalPayableAmount)}
+                subA={!isFieldMissing(contractA, 'finalPayableAmount') && !isFieldMissing(contractA, 'amount') ? `合同金额 - 优惠 = ${formatMoney(contractA.amount)} - ${formatMoney(contractA.discountAmount)}` : ''}
+                subB={!isFieldMissing(contractB, 'finalPayableAmount') && !isFieldMissing(contractB, 'amount') ? `合同金额 - 优惠 = ${formatMoney(contractB.amount)} - ${formatMoney(contractB.discountAmount)}` : ''}
+                missingA={isFieldMissing(contractA, 'finalPayableAmount')}
+                missingB={isFieldMissing(contractB, 'finalPayableAmount')}
+              />
+              <DiffCell
+                label="已计费金额"
+                valueA={formatMoney(contractA.billedAmount)}
+                valueB={formatMoney(contractB.billedAmount)}
+                missingA={isFieldMissing(contractA, 'billedAmount')}
+                missingB={isFieldMissing(contractB, 'billedAmount')}
+              />
+              <DiffCell
+                label="抵扣金额"
+                valueA={formatMoney(contractA.deductibleAmount)}
+                valueB={formatMoney(contractB.deductibleAmount)}
+                missingA={isFieldMissing(contractA, 'deductibleAmount')}
+                missingB={isFieldMissing(contractB, 'deductibleAmount')}
+              />
+              <DiffCell
+                label="已执行/实付金额"
                 valueA={formatMoney(contractA.executedAmount)}
                 valueB={formatMoney(contractB.executedAmount)}
                 missingA={isFieldMissing(contractA, 'executedAmount')}
                 missingB={isFieldMissing(contractB, 'executedAmount')}
               />
               <DiffCell
-                label="剩余金额"
+                label="剩余应付金额"
                 valueA={formatMoney(contractA.remainingAmount)}
                 valueB={formatMoney(contractB.remainingAmount)}
                 missingA={isFieldMissing(contractA, 'remainingAmount')}
                 missingB={isFieldMissing(contractB, 'remainingAmount')}
+              />
+              <DiffCell
+                label="★净应付金额"
+                valueA={formatMoney(contractA.netPayableAmount)}
+                valueB={formatMoney(contractB.netPayableAmount)}
+                subA={!isFieldMissing(contractA, 'netPayableAmount') ? '计费 - 抵扣 - 已付' : ''}
+                subB={!isFieldMissing(contractB, 'netPayableAmount') ? '计费 - 抵扣 - 已付' : ''}
+                missingA={isFieldMissing(contractA, 'netPayableAmount')}
+                missingB={isFieldMissing(contractB, 'netPayableAmount')}
+              />
+              <DiffCell
+                label="执行进度"
+                valueA={formatPercent(contractA.executionPercent)}
+                valueB={formatPercent(contractB.executionPercent)}
+                missingA={isFieldMissing(contractA, 'executionPercent')}
+                missingB={isFieldMissing(contractB, 'executionPercent')}
               />
             </div>
 
