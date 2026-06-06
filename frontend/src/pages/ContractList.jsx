@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Plus, Eye, Trash2, AlertTriangle } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Plus, Eye, Trash2, AlertTriangle, GitCompare } from 'lucide-react'
 import { useContracts } from '../context/ContractContext'
 import FilterPanel from '../components/FilterPanel'
 import ImportExport from '../components/ImportExport'
@@ -9,6 +9,7 @@ import ProgressBar from '../components/ProgressBar'
 import moment from 'moment'
 
 export default function ContractList() {
+  const navigate = useNavigate()
   const { contracts, loading, fetchContracts, deleteContract } = useContracts()
   const [showForm, setShowForm] = useState(false)
   const [editingContract, setEditingContract] = useState(null)
@@ -47,6 +48,10 @@ export default function ContractList() {
         <h1 className="text-2xl font-bold">合同管理</h1>
         <div className="flex items-center gap-3">
           <ImportExport />
+          <button onClick={() => navigate('/compare')} className="btn-secondary">
+            <GitCompare size={18} />
+            合同对比
+          </button>
           <button onClick={() => { setEditingContract(null); setShowForm(true) }} className="btn-primary">
             <Plus size={18} />
             新增合同

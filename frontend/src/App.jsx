@@ -4,6 +4,7 @@ import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import ContractList from './pages/ContractList'
 import ContractDetail from './pages/ContractDetail'
+import ContractCompare from './pages/ContractCompare'
 import CalendarView from './pages/CalendarView'
 
 function App() {
@@ -14,6 +15,7 @@ function App() {
           <Route index element={<Dashboard />} />
           <Route path="contracts" element={<ContractList />} />
           <Route path="contracts/:id" element={<ContractDetail />} />
+          <Route path="compare" element={<ContractCompare />} />
           <Route path="calendar" element={<CalendarView />} />
         </Route>
       </Routes>

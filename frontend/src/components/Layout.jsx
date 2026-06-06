@@ -1,11 +1,12 @@
-import { Link, useLocation } from 'react-router-dom'
-import { LayoutDashboard, FileText, CalendarDays, AlertTriangle } from 'lucide-react'
+import { Link, useLocation, Outlet } from 'react-router-dom'
+import { LayoutDashboard, FileText, CalendarDays, GitCompare, AlertTriangle } from 'lucide-react'
 import AlertBanner from './AlertBanner'
 import { useContracts } from '../context/ContractContext'
 
 const navItems = [
   { path: '/', label: '仪表盘', icon: LayoutDashboard },
   { path: '/contracts', label: '合同管理', icon: FileText },
+  { path: '/compare', label: '合同对比', icon: GitCompare },
   { path: '/calendar', label: '到期日历', icon: CalendarDays },
 ]
 
@@ -59,5 +60,3 @@ export default function Layout() {
     </div>
   )
 }
-
-import { Outlet } from 'react-router-dom'
